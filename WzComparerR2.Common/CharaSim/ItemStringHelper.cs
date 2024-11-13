@@ -28,7 +28,7 @@ namespace WzComparerR2.CharaSim
             }
         }
 
-        public static string GetGearPropString(GearPropType propType, int value)
+        public static string GetGearPropString(GearPropType propType, long value)
         {
             return GetGearPropString(propType, value, 0);
         }
@@ -39,7 +39,7 @@ namespace WzComparerR2.CharaSim
         /// <param Name="propType">表示装备属性枚举GearPropType。</param>
         /// <param Name="Value">表示propType属性所对应的值。</param>
         /// <returns></returns>
-        public static string GetGearPropString(GearPropType propType, int value, int signFlag)
+        public static string GetGearPropString(GearPropType propType, long value, int signFlag)
         {
 
             string sign;
@@ -319,8 +319,8 @@ namespace WzComparerR2.CharaSim
 
                 case GearType.energySword: return "能量剑";
                 case GearType.desperado: return "亡命剑";
-                case GearType.magicStick: return "驯兽魔法棒";
-                case GearType.whistle: return "哨子";
+                case GearType.magicStick: return "记忆长杖";
+                case GearType.whistle: return "飞越";
                 case GearType.boxingClaw: return "拳爪";
                 case GearType.katana2: return "小太刀";
                 case GearType.espLimiter: return "ESP限制器";
@@ -516,7 +516,7 @@ namespace WzComparerR2.CharaSim
                 case 64: return "魔链影士可穿戴装备";
                 case 65: return "爆莉萌天使可穿戴装备";
                 case 101: return "神之子可穿戴装备";
-                case 112: return "林之灵可穿戴装备";
+                case 112: return "琳可穿戴装备";
                 case 142: return "超能力者可穿戴装备";
                 case 151: return "御剑骑士可穿戴装备";
                 case 152: return "圣晶使徒可穿戴装备";
@@ -529,7 +529,7 @@ namespace WzComparerR2.CharaSim
             }
         }
 
-        public static string GetItemPropString(ItemPropType propType, int value)
+        public static string GetItemPropString(ItemPropType propType, long value)
         {
             switch (propType)
             {
@@ -752,7 +752,7 @@ namespace WzComparerR2.CharaSim
             return null;
         }
 
-        private static string ToChineseNumberExpr(int value)
+        private static string ToChineseNumberExpr(long value)
         {
             var sb = new StringBuilder(16);
             bool firstPart = true;
@@ -763,14 +763,14 @@ namespace WzComparerR2.CharaSim
             }
             if (value >= 1_0000_0000)
             {
-                int part = value / 1_0000_0000;
+                long part = value / 1_0000_0000;
                 sb.AppendFormat("{0}亿", part);
                 value -= part * 1_0000_0000;
                 firstPart = false;
             }
             if (value >= 1_0000)
             {
-                int part = value / 1_0000;
+                long part = value / 1_0000;
                 sb.Append(firstPart ? null : " ");
                 sb.AppendFormat("{0}万", part);
                 value -= part * 1_0000;
