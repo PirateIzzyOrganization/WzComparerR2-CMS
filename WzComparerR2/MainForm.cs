@@ -1,32 +1,33 @@
-﻿using System; 
-using System.Collections.Generic; 
+﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
-using System.Drawing;
 using System.Diagnostics;
+using System.Drawing;
+using System.IO;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Windows.Forms;
-using System.Linq;
-using System.IO;
-using System.Xml;
-using Timer = System.Timers.Timer;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Forms;
+using System.Xml;
+using static Microsoft.Xna.Framework.MathHelper;
+using Timer = System.Timers.Timer;
+using DevComponents.AdvTree;
 using DevComponents.DotNetBar;
 using DevComponents.DotNetBar.Controls;
-using DevComponents.AdvTree;
-using WzComparerR2.WzLib;
-using WzComparerR2.Common;
-using WzComparerR2.CharaSimControl;
-using WzComparerR2.PluginBase;
-using WzComparerR2.CharaSim;
-using WzComparerR2.Comparer;
-using WzComparerR2.Controls;
-using WzComparerR2.Rendering;
-using WzComparerR2.Config;
+
 using WzComparerR2.Animation;
-using static Microsoft.Xna.Framework.MathHelper;
+using WzComparerR2.CharaSim;
+using WzComparerR2.CharaSimControl;
+using WzComparerR2.Common;
+using WzComparerR2.Comparer;
+using WzComparerR2.Config;
+using WzComparerR2.Controls;
+using WzComparerR2.Encoders;
+using WzComparerR2.PluginBase;
+using WzComparerR2.WzLib;
 
 namespace WzComparerR2
 {
@@ -87,7 +88,7 @@ namespace WzComparerR2
             charaSimCtrl.Character = new Character();
             charaSimCtrl.Character.Name = "Test";
 
-            string[] images = new string[] { "dir", "mp3", "num", "png", "str", "uol", "vector", "img", "rawdata", "convex" };
+            string[] images = new string[] { "dir", "mp3", "num", "png", "str", "uol", "vector", "img", "rawdata", "convex", "video" };
             foreach (string img in images)
             {
                 imageList1.Images.Add(img, (Image)Properties.Resources.ResourceManager.GetObject(img));
@@ -510,6 +511,9 @@ namespace WzComparerR2
         {
             FrmGifSetting frm = new FrmGifSetting();
             frm.Load(ImageHandlerConfig.Default);
+            frm.FFmpegBinPathHint = FFmpegEncoder.DefaultExecutionFileName;
+            frm.FFmpegArgumentHint = FFmpegEncoder.DefaultArgumentFormat;
+            frm.FFmpegDefaultExtensionHint = FFmpegEncoder.DefaultOutputFileExtension;
             if (frm.ShowDialog() == DialogResult.OK)
             {
                 ConfigManager.Reload();
@@ -602,12 +606,13 @@ namespace WzComparerR2
         private void OnSaveGifFile(AnimationItem aniItem, bool options)
         {
             var config = ImageHandlerConfig.Default;
-            var encParams = AnimateEncoderFactory.GetEncoderParams(config.GifEncoder.Value);
+            using var encoder = AnimateEncoderFactory.CreateEncoder(config);
+            var cap = encoder.Compatibility;
 
             string aniName = this.cmbItemAniNames.SelectedItem as string;
             string aniFileName = pictureBoxEx1.PictureName
                     + (string.IsNullOrEmpty(aniName) ? "" : ("." + aniName))
-                    + encParams.FileExtension;
+                    + cap.DefaultExtension;
 
             if (config.AutoSaveEnabled)
             {
@@ -624,8 +629,8 @@ namespace WzComparerR2
             else
             {
                 var dlg = new SaveFileDialog();
-
-                dlg.Filter = string.Format("{0}(*{1})|*{1}|全部文件(*.*)|*.*", encParams.FileDescription, encParams.FileExtension);
+                string extensionFilter = string.Join(";", cap.SupportedExtensions.Select(ext => $"*{ext}"));
+                dlg.Filter = string.Format("{0} Supported Files ({1})|{1}|All files (*.*)|*.*", encoder.Name, extensionFilter);
                 dlg.FileName = aniFileName;
 
                 if (dlg.ShowDialog() != DialogResult.OK)
@@ -636,7 +641,7 @@ namespace WzComparerR2
             }
 
             var clonedAniItem = (AnimationItem)aniItem.Clone();
-            if (this.pictureBoxEx1.SaveAsGif(clonedAniItem, aniFileName, config, options))
+            if (this.pictureBoxEx1.SaveAsGif(clonedAniItem, aniFileName, config, encoder, options))
             {
                 labelItemStatus.Text = "图片保存于" + aniFileName;
             }
@@ -1079,6 +1084,9 @@ namespace WzComparerR2
                 case Wz_Convex convex:
                     return $"convex [{convex.Points.Length}]";
 
+                case Wz_Video video:
+                    return $"video {video.Length}";
+
                 default:
                     string cellVal = Convert.ToString(value);
                     if (cellVal != null && cellVal.Length > 50)
@@ -1102,6 +1110,7 @@ namespace WzComparerR2
                 Wz_Image => "img",
                 Wz_RawData => "rawdata",
                 Wz_Convex => "convex",
+                Wz_Video => "video",
                 _ => null
             };
         }
@@ -1173,6 +1182,11 @@ namespace WzComparerR2
                 case Wz_RawData rawData:
                     textBoxX1.Text = "dataLength: " + rawData.Length + " bytes\r\n" +
                         "offset: " + rawData.Offset;
+                    break;
+
+                case Wz_Video video:
+                    textBoxX1.Text = "dataLength: " + video.Length + " bytes\r\n" +
+                        "offset: " + video.Offset;
                     break;
 
                 default:
@@ -1898,7 +1912,7 @@ namespace WzComparerR2
             QueryPerformance.Start();
             if (!this.stringLinker.HasValues)
             {
-                if (!this.stringLinker.Load(findStringWz()))
+                if (!this.TryLoadStringWz())
                 {
                     MessageBoxEx.Show("没有初始化string链接，请手动指定一个String.wz。", "喵~~");
                     return;
@@ -1962,19 +1976,19 @@ namespace WzComparerR2
             }            
         }
 
-        private Wz_File findStringWz()
+        private bool TryLoadStringWz()
         {
             foreach (Wz_Structure wz in openedWz)
             {
                 foreach (Wz_File file in wz.wz_files)
                 {
-                    if (file.Type == Wz_Type.String)
+                    if (file.Type == Wz_Type.String && this.stringLinker.Load(file))
                     {
-                        return file;
+                        return true;
                     }
                 }
             }
-            return null;
+            return false;
         }
 
         private IEnumerable<KeyValuePair<int, StringResult>> searchStringLinker(IEnumerable<Dictionary<int, StringResult>> dicts, string key, bool exact, bool isRegex)
@@ -2438,7 +2452,7 @@ namespace WzComparerR2
             tsmi2HandleUol.Visible = false;
             if (node != null)
             {
-                if (node.Value is Wz_Sound || node.Value is Wz_Png || node.Value is string || node.Value is Wz_RawData)
+                if (node.Value is Wz_Sound || node.Value is Wz_Png || node.Value is string || node.Value is Wz_RawData || node.Value is Wz_Video)
                 {
                     tsmi2SaveAs.Visible = true;
                     tsmi2SaveAs.Enabled = true;
@@ -2507,7 +2521,7 @@ namespace WzComparerR2
 
             if (!this.stringLinker.HasValues)
             {
-                this.stringLinker.Load(findStringWz());
+                this.TryLoadStringWz();
             }
 
             object obj = null;
@@ -2995,7 +3009,7 @@ namespace WzComparerR2
             if (dlg.ShowDialog() == DialogResult.OK)
             {
                 if (!this.stringLinker.HasValues)
-                    this.stringLinker.Load(findStringWz());
+                    this.TryLoadStringWz();
 
                 DBConnection conn = new DBConnection(this.stringLinker);
                 DataSet ds = conn.GenerateSkillTable();
@@ -3018,7 +3032,7 @@ namespace WzComparerR2
             if (dlg.ShowDialog() == DialogResult.OK)
             {
                 if (!this.stringLinker.HasValues)
-                    this.stringLinker.Load(findStringWz());
+                    this.TryLoadStringWz();
 
                 DBConnection conn = new DBConnection(this.stringLinker);
                 conn.ExportSkillOption(dlg.SelectedPath);

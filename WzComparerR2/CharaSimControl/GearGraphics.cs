@@ -97,6 +97,11 @@ namespace WzComparerR2.CharaSimControl
         public static readonly Brush GreenBrush2 = new SolidBrush(Color.FromArgb(204, 255, 0));
         public static readonly Color GrayColor2 = Color.FromArgb(153, 153, 153);
         /// <summary>
+        /// 表示装备属性额外说明中使用的卷轴强化数值画刷。
+        /// </summary>
+        public static readonly Color ScrollEnhancementColor = Color.FromArgb(175, 173, 255);
+        public static readonly Brush ScrollEnhancementBrush = new SolidBrush(ScrollEnhancementColor);
+        /// <summary>
         /// 表示用于绘制“攻击力提升”文字的灰色画刷。
         /// </summary>
         public static readonly Brush GrayBrush2 = new SolidBrush(GrayColor2);
@@ -108,6 +113,10 @@ namespace WzComparerR2.CharaSimControl
         /// 表示套装属性不可用的灰色画刷。
         /// </summary>
         public static readonly Brush SetItemGrayBrush = new SolidBrush(Color.FromArgb(119, 136, 153));
+        /// <summary>
+        /// 表示效果不可用的红色画刷。
+        /// </summary>
+        public static readonly Brush BlockRedBrush = new SolidBrush(Color.FromArgb(255, 0, 102));
         /// <summary>
         /// 表示装备tooltip中金锤子描述文字的颜色画刷。
         /// </summary>
@@ -223,12 +232,12 @@ namespace WzComparerR2.CharaSimControl
         /// <param Name="x">起始的x坐标。</param>
         /// <param Name="X1">每行终止的x坐标。</param>
         /// <param Name="y">起始行的y坐标。</param>
-        public static void DrawString(Graphics g, string s, Font font, int x, int x1, ref int y, int height)
+        public static void DrawString(Graphics g, string s, Font font, int x, int x1, ref int y, int height, TextAlignment alignment = TextAlignment.Left)
         {
-            DrawString(g, s, font, null, x, x1, ref y, height);
+            DrawString(g, s, font, null, x, x1, ref y, height, alignment);
         }
 
-        public static void DrawString(Graphics g, string s, Font font, IDictionary<string, Color> fontColorTable, int x, int x1, ref int y, int height)
+        public static void DrawString(Graphics g, string s, Font font, IDictionary<string, Color> fontColorTable, int x, int x1, ref int y, int height, TextAlignment alignment = TextAlignment.Left)
         {
             if (s == null)
                 return;
@@ -238,11 +247,11 @@ namespace WzComparerR2.CharaSimControl
                 r.WordWrapEnabled = false;
                 r.UseGDIRenderer = false;
                 r.FontColorTable = fontColorTable;
-                r.DrawString(g, s, font, x, x1, ref y, height);
+                r.DrawString(g, s, font, x, x1, ref y, height, alignment);
             }
         }
 
-        public static void DrawPlainText(Graphics g, string s, Font font, Color color, int x, int x1, ref int y, int height)
+        public static void DrawPlainText(Graphics g, string s, Font font, Color color, int x, int x1, ref int y, int height, TextAlignment alignment = TextAlignment.Left)
         {
             if (s == null)
                 return;
@@ -251,7 +260,7 @@ namespace WzComparerR2.CharaSimControl
             {
                 r.WordWrapEnabled = false;
                 r.UseGDIRenderer = false;
-                r.DrawPlainText(g, s, font, color, x, x1, ref y, height);
+                r.DrawPlainText(g, s, font, color, x, x1, ref y, height, alignment);
             }
         }
 
@@ -497,30 +506,38 @@ namespace WzComparerR2.CharaSimControl
                     g.DrawString(tagName, font, brush, left, picH, fmt);
                 }
             }
-            else //  ani mode
+            else // ani mode
             {
+                bool mixedAniMode = wce[1].Bitmap != null && (wce[1].Bitmap.Width > 1 || wce[1].Bitmap.Height > 1);
+
                 offsetY = Math.Min(offsetY, ani0.OpOrigin.Y);
                 height = Math.Max(height, ani0.Rectangle.Bottom);
 
-                int bgWidth = wce[1].Bitmap?.Width ?? 0;
+                int bgWidth = mixedAniMode ? wce[1].Bitmap.Width : nameWidth;
                 int left = center - bgWidth / 2;
                 int right = left + bgWidth;
                 int nameLeft = center - nameWidth / 2;
 
                 picH -= offsetY;
 
-                if (wce[1].Bitmap != null) // draw center only
+                if (mixedAniMode)
                 {
-                    g.DrawImage(wce[1].Bitmap, left - wce[1].Origin.X, picH - wce[1].Origin.Y);
+                    // draw legay center
+                    // Note: item 1143360 (MILESTONE) does not render well, ignore it.
+                    g.DrawImage(wce[1].Bitmap, left - wce[1].Origin.X, picH - wce[1].Origin.Y);                   
+                    // draw ani0 based on bg center position
+                    g.DrawImage(ani0.Bitmap, left - wce[1].Origin.X - ani0.Origin.X, picH - wce[1].Origin.Y - ani0.Origin.Y);
+                    if (!string.IsNullOrEmpty(tagName)) // draw name
+                    {
+                        using var brush = new SolidBrush(color);
+                        // offsetX with bg for better alignment
+                        g.DrawString(tagName, font, brush, nameLeft - wce[1].Origin.X, picH, fmt);
+                    }
                 }
-                // draw ani0 based on bg center position
-                g.DrawImage(ani0.Bitmap, left - wce[1].Origin.X - ani0.Origin.X, picH - wce[1].Origin.Y - ani0.Origin.Y);
-                // draw name
-                if (!string.IsNullOrEmpty(tagName))
+                else
                 {
-                    using var brush = new SolidBrush(color);
-                    // offsetX with bg for better alignment
-                    g.DrawString(tagName, font, brush, nameLeft - wce[1].Origin.X, picH, fmt);
+                    // draw ani0 only
+                    g.DrawImage(ani0.Bitmap, left - ani0.Origin.X, picH - ani0.Origin.Y);
                 }
             }
 
@@ -557,7 +574,7 @@ namespace WzComparerR2.CharaSimControl
             int drawX;
             Color defaultColor;
 
-            public void DrawString(Graphics g, string s, Font font, int x, int x1, ref int y, int height)
+            public void DrawString(Graphics g, string s, Font font, int x, int x1, ref int y, int height, TextAlignment alignment = TextAlignment.Left)
             {
                 //初始化环境
                 this.g = g;
@@ -566,10 +583,10 @@ namespace WzComparerR2.CharaSimControl
                 float fontLineHeight = GetFontLineHeight(font);
                 this.infinityRect = new RectangleF(0, 0, ushort.MaxValue, fontLineHeight);
 
-                base.DrawFormatString(s, font, x1 - x, ref y, height);
+                base.DrawFormatString(s, font, x1 - x, ref y, height, alignment);
             }
 
-            public void DrawPlainText(Graphics g, string s, Font font, Color color, int x, int x1, ref int y, int height)
+            public void DrawPlainText(Graphics g, string s, Font font, Color color, int x, int x1, ref int y, int height, TextAlignment alignment = TextAlignment.Left)
             {
                 //初始化环境
                 this.g = g;
@@ -578,7 +595,7 @@ namespace WzComparerR2.CharaSimControl
                 float fontLineHeight = GetFontLineHeight(font);
                 this.infinityRect = new RectangleF(0, 0, ushort.MaxValue, fontLineHeight);
 
-                base.DrawPlainText(s, font, x1 - x, ref y, height);
+                base.DrawPlainText(s, font, x1 - x, ref y, height, alignment);
             }
 
             private float GetFontLineHeight(Font font)
@@ -695,8 +712,6 @@ namespace WzComparerR2.CharaSimControl
                     switch (colorID)
                     {
                         case "c": color = GearGraphics.OrangeBrushColor; break;
-                        case "g": color = GearGraphics.gearGreenColor; break;
-                        case "$": color = GearGraphics.gearCyanColor; break;
                         default: color = this.defaultColor; break;
                     }
                 }

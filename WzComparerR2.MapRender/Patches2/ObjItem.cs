@@ -18,6 +18,8 @@ namespace WzComparerR2.MapRender.Patches2
         public bool Flip { get; set; }
         public bool Light { get; set; }
         public string SpineAni { get; set; }
+        public List<QuestInfo> Quest { get; private set; } = new List<QuestInfo>();
+        public List<QuestExInfo> Questex { get; private set; } = new List<QuestExInfo>();
 
         public ItemView View { get; set; }
 
@@ -44,6 +46,46 @@ namespace WzComparerR2.MapRender.Patches2
             {
                 item.Tags = objTags.Split(',').Select(tag => tag.Trim()).ToArray();
             }
+
+            if (item.Tags != null)
+            {
+                int questID;
+                foreach (string tag in item.Tags)
+                {
+                    if (int.TryParse(tag, out questID) || (tag.StartsWith("q") && int.TryParse(tag.Substring(1), out questID)))
+                    {
+                        item.Quest.Add(new QuestInfo(questID, 1));
+                    }
+                }
+            }
+
+            if (node.Nodes["quest"] != null)
+            {
+                foreach (Wz_Node questNode in node.Nodes["quest"].Nodes)
+                {
+                    if (int.TryParse(questNode.Text, out int questID))
+                    {
+                        item.Quest.Add(new QuestInfo(questID, Convert.ToInt32(questNode.Value)));
+                    }  
+                }
+            }
+
+            if (node.Nodes["questex"] != null)
+            {
+                foreach (Wz_Node questNode in node.Nodes["questex"].Nodes)
+                {
+                    if (int.TryParse(questNode.Text, out int questID))
+                    {
+                        Wz_Node keyNode = questNode.Nodes["key"];
+                        Wz_Node valueNode = questNode.Nodes["value"];
+                        if (keyNode != null && valueNode != null)
+                        {
+                            item.Questex.Add(new QuestExInfo(questID, keyNode.GetValueEx<string>(null), valueNode.GetValueEx<int>(-1)));
+                        }
+                    }
+                }
+            }
+
             return item;
         }
 
