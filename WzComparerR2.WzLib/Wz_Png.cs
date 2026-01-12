@@ -282,13 +282,24 @@ namespace WzComparerR2.WzLib
                 case Wz_TextureFormat.BC7:
                     if (this.ActualScale != 1)
                         throw new Exception("BC7 does not support scale.");
-                    pngDecoded = new Bitmap(this.Width, this.Height, PixelFormat.Format32bppArgb);
-                    bmpdata = pngDecoded.LockBits(new Rectangle(0, 0, this.Width, this.Height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+                    pngDecoded = new Bitmap(this.Width & ~3, this.Height & ~3, PixelFormat.Format32bppArgb);
+                    bmpdata = pngDecoded.LockBits(new Rectangle(Point.Empty, pngDecoded.Size), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
                     unsafe
                     {
                         Span<byte> outputPixels = new Span<byte>(bmpdata.Scan0.ToPointer(), bmpdata.Stride * bmpdata.Height);
-                        ImageCodec.BC7ToRGBA32(pixel, outputPixels, bmpdata.Width, bmpdata.Stride, bmpdata.Height);
+                        ImageCodec.BC7ToRGBA32(pixel, this.Width * 4, outputPixels, bmpdata.Width, bmpdata.Stride, bmpdata.Height);
                         ImageCodec.RGBA32ToBGRA32(outputPixels, outputPixels);
+                    }
+                    pngDecoded.UnlockBits(bmpdata);
+                    break;
+
+                case Wz_TextureFormat.R16:
+                    pngDecoded = new Bitmap(this.Width, this.Height, PixelFormat.Format64bppArgb);
+                    bmpdata = pngDecoded.LockBits(new Rectangle(Point.Empty, pngDecoded.Size), ImageLockMode.WriteOnly, pngDecoded.PixelFormat);
+                    unsafe
+                    {
+                        Span<byte> output = new Span<byte>(bmpdata.Scan0.ToPointer(), bmpdata.Stride * bmpdata.Height);
+                        ImageCodec.R16ToBGRA64(pixel, output);
                     }
                     pngDecoded.UnlockBits(bmpdata);
                     break;
@@ -335,14 +346,17 @@ namespace WzComparerR2.WzLib
             {
                 Wz_TextureFormat.ARGB4444 or
                 Wz_TextureFormat.ARGB1555 or
-                Wz_TextureFormat.RGB565 => width * height * 2,
+                Wz_TextureFormat.RGB565 or
+                Wz_TextureFormat.R16 => width * height * 2,
 
                 Wz_TextureFormat.ARGB8888 or
                 Wz_TextureFormat.RGBA1010102 => width * height * 4,
 
                 Wz_TextureFormat.DXT3 or
-                Wz_TextureFormat.DXT5 or
-                Wz_TextureFormat.BC7 => ((width + 3) / 4) * ((height + 3) / 4) * 16,
+                Wz_TextureFormat.DXT5 => ((width + 3) / 4) * ((height + 3) / 4) * 16,
+
+                // TMST v1272, width and height for BC7 format are not always multiples of 4, NX will add row padding and discard the tail rows.
+                Wz_TextureFormat.BC7 => width * (height & ~3),
 
                 Wz_TextureFormat.DXT1 => ((width + 3) / 4) * ((height + 3) / 4) * 8,
 
@@ -362,6 +376,8 @@ namespace WzComparerR2.WzLib
         ARGB8888 = 2,
         ARGB1555 = 257,
         RGB565 = 513,
+        /* introduced in KMST 1197 */
+        R16 = 769,
         DXT3 = 1026,
         DXT5 = 2050,
         /* introduced in KMST 1186 */

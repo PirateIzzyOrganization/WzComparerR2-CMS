@@ -111,7 +111,12 @@ namespace WzComparerR2.WzLib
             int old_off = (int)f.FileStream.Position;
             f.FileStream.Position = f.Header.DataStartPosition;
             var br = new WzBinaryReader(f.FileStream, false);
-            if (br.ReadCompressedInt32() <= 0) //只有文件头 无法预判
+            int nodeCount = br.ReadCompressedInt32();
+            if (f.Header.Signature == Wz_Header.PKG2)
+            {
+                nodeCount = f.DecryptPkg2EntryCount(nodeCount);
+            }
+            if (nodeCount <= 0) //只有文件头 无法预判
             {
                 return;
             }
@@ -175,7 +180,9 @@ namespace WzComparerR2.WzLib
         {
             // MSEA 225 has a node in Base.wz named "Base,Character,Effect,Etc,Item,Map,Mob,Morph,Npc,Quest,Reactor,Skill,Sound,String,TamingMob,UI"
             // It is so funny but wzlib have to be compatible with it.
-            return nodeName.EndsWith(".img") || nodeName.EndsWith(".lua") || Regex.IsMatch(nodeName, @"^[A-Za-z0-9_,]+$");
+            // 2025-06-04: MSEA 242 has a new node named "Base Character Effect Etc Item Map Mob Morph Npc Quest Reactor Skill Sound String TamingMob UI"
+            // so we only verify if the nodeName is a valid ascii string.
+            return nodeName.EndsWith(".img") || nodeName.EndsWith(".lua") || Regex.IsMatch(nodeName, @"^[\x20-\x7f]+$");
         }
 
         static readonly byte[] iv_gms = { 0x4d, 0x23, 0xc7, 0x2b };

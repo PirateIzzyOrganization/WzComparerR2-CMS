@@ -163,21 +163,23 @@ namespace WzComparerR2.WzLib.Utilities
             }
         }
 
-        public static void BC7ToRGBA32(ReadOnlySpan<byte> blockData, Span<byte> outputRgbaPixels, int width, int stride, int height)
+        public static void BC7ToRGBA32(ReadOnlySpan<byte> blockData, int srcStride, Span<byte> outputRgbaPixels, int width, int stride, int height)
         {
             Span<BC7Decomp.color_rgba> rgba = stackalloc BC7Decomp.color_rgba[16];
             Span<byte> rgbaBytes = MemoryMarshal.AsBytes(rgba);
 
-            for (int y = 0; y < height; y += 4)
+            int blocksPerRow = width & ~3;
+            for (int y = 0, dataStart = 0; y < height; y += 4, dataStart += srcStride)
             {
+                ReadOnlySpan<byte> dataRow = blockData.Slice(dataStart, srcStride);
                 for (int x = 0; x < width; x += 4)
                 {
-                    BC7Decomp.unpack_bc7(blockData, rgba);
+                    BC7Decomp.unpack_bc7(dataRow, rgba);
                     rgbaBytes.Slice(0, 16).CopyTo(outputRgbaPixels.Slice(y * stride + x * 4));
                     rgbaBytes.Slice(16, 16).CopyTo(outputRgbaPixels.Slice((y + 1) * stride + x * 4));
                     rgbaBytes.Slice(32, 16).CopyTo(outputRgbaPixels.Slice((y + 2) * stride + x * 4));
                     rgbaBytes.Slice(48, 16).CopyTo(outputRgbaPixels.Slice((y + 3) * stride + x * 4));
-                    blockData = blockData.Slice(16);
+                    dataRow = dataRow.Slice(16);
                 }
             }
         }
@@ -327,6 +329,70 @@ namespace WzComparerR2.WzLib.Utilities
                 uint a8 = a * 85;
                 uint outputPixel = b8 | (g8 << 8) | (r8 << 16) | (a8 << 24);
                 output32[i] = outputPixel;
+            }
+        }
+
+        public static void R16ToBGRA64(ReadOnlySpan<byte> r16Pixels, Span<byte> outputBgraPixels)
+        {
+#if NET6_0_OR_GREATER
+            //    0                        8                        16                       24
+            //    r1 r1 r2 r2 r3 r3 r4 r4  r1 r1 r2 r2 r3 r3 r4 r4  r1 r1 r2 r2 r3 r3 r4 r4  r1 r1 r2 r2 r3 r3 r4 r4
+            // => 00 00 00 00 r1 r1 ff ff  00 00 00 00 r2 r2 ff ff  00 00 00 00 r3 r3 ff ff  00 00 00 00 r4 r4 ff ff
+            if (r16Pixels.Length >= 8 && Avx2.IsSupported)
+            {
+                var mask1 = Vector256.Create((byte)255, 255, 255, 255, 0, 1, 255, 255, 
+                    255, 255, 255, 255, 2, 3, 255, 255,
+                    255, 255, 255, 255, 4, 5, 255, 255, 
+                    255, 255, 255, 255, 6, 7, 255, 255);
+                var mask2 = Vector256.Create(0xffff_0000_0000_0000u).AsByte();
+                unsafe
+                {
+                    while (r16Pixels.Length >= 8)
+                    {
+                        ulong vec64 = MemoryMarshal.Read<ulong>(r16Pixels);
+                        var ymm0 = Vector256.Create(vec64);
+                        var ymm1 = Avx2.Shuffle(ymm0.AsByte(), mask1);
+                        ymm1 = Avx2.Or(ymm1, mask2);
+                        fixed (byte* pOutput = outputBgraPixels)
+                            Avx.Store(pOutput, ymm1);
+                        r16Pixels = r16Pixels.Slice(8);
+                        outputBgraPixels = outputBgraPixels.Slice(32);
+                    }
+                }
+            }
+            if (r16Pixels.Length >= 4 && Ssse3.IsSupported)
+            {
+                //    0                        8                      
+                //    r1 r1 r2 r2 r1 r1 r2 r2  r1 r1 r2 r2 r1 r1 r2 r2
+                // => 00 00 00 00 r1 r1 ff ff  00 00 00 00 r2 r2 ff ff
+                var mask1 = Vector128.Create((byte)255, 255, 255, 255, 0, 1, 255, 255, 
+                    255, 255, 255, 255, 2, 3, 255, 255);
+                var mask2 = Vector128.Create(0xffff_0000_0000_0000u).AsByte();
+                unsafe
+                {
+                    while (r16Pixels.Length >= 4)
+                    {
+                        uint vec32 = MemoryMarshal.Read<uint>(r16Pixels);
+                        var xmm0 = Vector128.Create(vec32);
+                        var xmm1 = Ssse3.Shuffle(xmm0.AsByte(), mask1);
+                        xmm1 = Sse2.Or(xmm1, mask2);
+                        fixed (byte* pOutput = outputBgraPixels)
+                            Sse2.Store(pOutput, xmm1);
+                        r16Pixels = r16Pixels.Slice(4);
+                        outputBgraPixels = outputBgraPixels.Slice(16);
+                    }
+                }
+            }
+#endif
+            if (r16Pixels.Length >= 2)
+            {
+                while (r16Pixels.Length >= 2)
+                {
+                    ulong pixel = 0xffff0000_00000000 | ((ulong)MemoryMarshal.Read<ushort>(r16Pixels) << 32);
+                    MemoryMarshal.Write(outputBgraPixels, ref pixel);
+                    r16Pixels = r16Pixels.Slice(2);
+                    outputBgraPixels = outputBgraPixels.Slice(8);
+                }
             }
         }
 

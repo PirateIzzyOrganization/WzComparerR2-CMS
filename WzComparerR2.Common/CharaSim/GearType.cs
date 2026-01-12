@@ -156,6 +156,10 @@ namespace WzComparerR2.CharaSim
         /// </summary>
         breathShooter = 1214,
         /// <summary>
+        /// 长剑 1215
+        /// </summary>
+        longSword = 1215,
+        /// <summary>
         /// 灵魂手铳 122
         /// </summary>
         soulShooter = 122,
@@ -168,9 +172,17 @@ namespace WzComparerR2.CharaSim
         /// </summary>
         energySword = 124,
         /// <summary>
-        /// 驯兽魔法棒 125
+        /// 记忆长杖 1252
         /// </summary>
-        magicStick = 125,
+        memorialStaff = 1252,
+        /// <summary>
+        /// 星灵权杖 1253
+        /// </summary>
+        celestialLight = 1253,
+        /// <summary>
+        /// 驯兽魔法棒 1259
+        /// </summary>
+        magicStick = 1259,
         /// <summary>
         /// ESP限制器
         /// </summary>
@@ -292,6 +304,10 @@ namespace WzComparerR2.CharaSim
         /// </summary>
         boxingSky = 135286,
         /// <summary>
+        /// 罗盘 135_87
+        /// </summary>
+        compass = 135287,
+        /// <summary>
         /// 手腕护带 135_90
         /// </summary>
         viperWristband = 135290,
@@ -379,6 +395,10 @@ namespace WzComparerR2.CharaSim
         /// 索魂器 135403x
         /// </summary>
         hexSeeker = 135403,
+        /// <summary>
+        /// 如意宝珠 135404
+        /// </summary>
+        yeouiGem = 135404,
         /// <summary>
         /// 手杖
         /// </summary>
@@ -485,6 +505,10 @@ namespace WzComparerR2.CharaSim
         /// </summary>
         ancientBow = 159,
         /// <summary>
+        /// Astra 172
+        /// </summary>
+        astra = 172,
+        /// <summary>
         /// 拼图 168
         /// </summary>
         bit = 168,
@@ -508,6 +532,13 @@ namespace WzComparerR2.CharaSim
         /// 珠宝 178
         /// </summary>
         jewel = 178,
+        /// <summary>
+        /// MSN纸娃娃 179
+        /// </summary>
+        face_n = 1790,
+        hair_n = 1791,
+        head_n = 1792,
+        hair2_n = 1793,
         /// <summary>
         /// 宠物装备 180
         /// </summary>
